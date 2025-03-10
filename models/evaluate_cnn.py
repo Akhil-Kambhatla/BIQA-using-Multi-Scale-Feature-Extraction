@@ -5,12 +5,12 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 import matplotlib.pyplot as plt
 from scipy.stats import pearsonr
-from store_results import save_results
 import os
+from store_results import save_results  # Import result-saving function
 
 # Define file paths
 dataset_csv = r"C:\Users\akhil\OneDrive\Desktop\BIQA_LIVE\data\scores\training_data.csv"
-model_path = r"C:\Users\akhil\OneDrive\Desktop\BIQA_LIVE\models\biqa_cnn.pth"
+models_dir = r"C:\Users\akhil\OneDrive\Desktop\BIQA_LIVE\models"
 plots_folder = r"C:\Users\akhil\OneDrive\Desktop\BIQA_LIVE\results\plots"
 
 # Ensure plots folder exists
@@ -18,15 +18,11 @@ os.makedirs(plots_folder, exist_ok=True)
 
 # Load dataset
 df = pd.read_csv(dataset_csv)
+df["MOS"] = df["MOS"] / 100.0  # Normalize MOS
 
-# Normalize MOS to range [0,1] (same as training)
-df["MOS"] = df["MOS"] / 100.0
-
-# Drop 'Image' column (not needed for evaluation)
 X = df.drop(columns=["Image", "MOS"]).values  # Features
-y = df["MOS"].values  # Labels (Mean Opinion Score)
+y = df["MOS"].values  # Labels
 
-# Convert to PyTorch tensors
 X_tensor = torch.tensor(X, dtype=torch.float32)
 y_tensor = torch.tensor(y, dtype=torch.float32).view(-1, 1)
 
@@ -35,7 +31,7 @@ test_size = int(0.2 * len(X))
 test_dataset = TensorDataset(X_tensor[-test_size:], y_tensor[-test_size:])
 test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
 
-# Define CNN Model (same as train script)
+# Define CNN Model
 class BIQA_CNN(nn.Module):
     def __init__(self, input_dim):
         super(BIQA_CNN, self).__init__()
@@ -54,51 +50,58 @@ class BIQA_CNN(nn.Module):
         x = self.fc4(x)
         return x
 
-# Load trained model
-input_dim = X.shape[1]
-model = BIQA_CNN(input_dim)
-model.load_state_dict(torch.load(model_path))
-model.eval()
 
-# Evaluate Model
-actual, predicted = [], []
-with torch.no_grad():
-    for batch_X, batch_y in test_loader:
-        predictions = model(batch_X)
-        actual.extend(batch_y.numpy().flatten())
-        predicted.extend(predictions.numpy().flatten())
+# Evaluate all trained models
+for model_file in os.listdir(models_dir):
+    if model_file.endswith(".pth"):
+        model_path = os.path.join(models_dir, model_file)
 
-# Reverse normalization
-predicted = np.array(predicted) * 100
-actual = np.array(actual) * 100
+        # Load trained model
+        input_dim = X.shape[1]
+        model = BIQA_CNN(input_dim)
+        model.load_state_dict(torch.load(model_path))
+        model.eval()
 
-# Compute MAE & Pearson Correlation
-mae = np.mean(np.abs(actual - predicted))
-pearson_corr, _ = pearsonr(actual, predicted)
-print(f"📊 MAE: {mae:.4f}, 🔗 Pearson Corr: {pearson_corr:.4f}")
+        # Evaluate Model
+        actual, predicted = [], []
+        with torch.no_grad():
+            for batch_X, batch_y in test_loader:
+                predictions = model(batch_X)
+                actual.extend(batch_y.numpy().flatten())
+                predicted.extend(predictions.numpy().flatten())
 
+        # Reverse normalization
+        predicted = np.array(predicted) * 100
+        actual = np.array(actual) * 100
 
-# Define model hyperparameters for logging
-num_epochs = 100
-batch_size = 32
-learning_rate = 0.0005
-model_name = f"CNN_Model_{num_epochs}_{batch_size}_{learning_rate}"
+        # Compute MAE & Pearson Correlation
+        mae = np.mean(np.abs(actual - predicted))
+        pearson_corr, _ = pearsonr(actual, predicted)
 
-# Save results
-save_results(model_name, num_epochs, batch_size, learning_rate, mae, pearson_corr)
+        # Extract model parameters correctly
+        try:
+            _, epochs, batch_size, learning_rate = model_file.replace(".pth", "").split("_")
+            epochs, batch_size, learning_rate = int(epochs), int(batch_size), float(learning_rate)
+        except ValueError:
+            print(f"⚠️ Skipping model {model_file} due to incorrect filename format.")
+            continue  # Skip this model if the filename does not match the expected format
 
-# Save plot
-plot_path = os.path.join(plots_folder, f"{model_name}.png")
+        model_name = f"CNN_{epochs}_{batch_size}_{learning_rate}"
 
-plt.figure(figsize=(8, 6))
-plt.scatter(actual, predicted, alpha=0.7)
-plt.plot([min(actual), max(actual)], [min(actual), max(actual)], 'r', linestyle="--")
-plt.xlabel("Actual MOS")
-plt.ylabel("Predicted MOS")
-plt.title(f"CNN Model Performance (Pearson Corr: {pearson_corr:.2f})")
-plt.grid()
-plt.savefig(plot_path)  # Save the plot
-plt.close()
+        # Save results
+        save_results(model_name, epochs, batch_size, learning_rate, mae, pearson_corr)
 
-print(f"✅ Model results saved to `model_results.csv`")
-print(f"📁 Plot saved at {plot_path}")
+        # Save plot
+        plot_path = os.path.join(plots_folder, f"{model_name}.png")
+
+        plt.figure(figsize=(8, 6))
+        plt.scatter(actual, predicted, alpha=0.7)
+        plt.plot([min(actual), max(actual)], [min(actual), max(actual)], 'r', linestyle="--")
+        plt.xlabel("Actual MOS")
+        plt.ylabel("Predicted MOS")
+        plt.title(f"{model_name} (Pearson Corr: {pearson_corr:.2f})")
+        plt.grid()
+        plt.savefig(plot_path)  # Save the plot
+        plt.close()
+
+        print(f"✅ Model {model_name} evaluated & results saved")
