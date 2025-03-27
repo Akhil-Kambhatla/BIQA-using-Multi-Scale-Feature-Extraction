@@ -60,7 +60,7 @@ class ResNetFeatureExtractor(nn.Module):
 def train_resnet(num_epochs, batch_size, learning_rate, resnet_version=18):
     """ Train a ResNet model for BIQA. """
 
-    # Create DataLoaders
+    # Create DataLoader with different batch sizes
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
     # Initialize Model
@@ -101,10 +101,14 @@ def train_resnet(num_epochs, batch_size, learning_rate, resnet_version=18):
     return model_name
 
 
-# Train models with different hyperparameters
+# Train models with updated hyperparameters
 hyperparameter_sets = [
-    (100, 32, 0.0005, 18),  # (epochs, batch_size, learning_rate, resnet_version)
-    (150, 64, 0.0003, 50)
+    (100, 16, 0.001, 18),  # Small batch, faster updates (ResNet-18)
+    (200, 32, 0.0007, 18),  # Medium batch (ResNet-18)
+    (300, 64, 0.0005, 18),  # Larger batch, more stable updates (ResNet-18)
+    (100, 32, 0.0008, 50),  # Small batch for deeper model (ResNet-50)
+    (250, 64, 0.0006, 50),  # Medium batch for balance (ResNet-50)
+    (400, 128, 0.0003, 50)  # Large batch, lower learning rate (ResNet-50)
 ]
 
 for params in hyperparameter_sets:

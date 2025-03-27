@@ -7,14 +7,15 @@ import torchvision.models as models
 import matplotlib.pyplot as plt
 from scipy.stats import pearsonr
 import os
-from store_results import save_results  # Import result-saving function
 
 # Define file paths
 dataset_csv = r"C:\Users\akhil\OneDrive\Desktop\BIQA_LIVE\data\scores\training_data.csv"
 models_dir = r"C:\Users\akhil\OneDrive\Desktop\BIQA_LIVE\models"
+results_csv = r"C:\Users\akhil\OneDrive\Desktop\BIQA_LIVE\results\model_results.csv"
 plots_folder = r"C:\Users\akhil\OneDrive\Desktop\BIQA_LIVE\results\plots"
 
-# Ensure plots folder exists
+# Ensure results and plots directories exist
+os.makedirs(os.path.dirname(results_csv), exist_ok=True)
 os.makedirs(plots_folder, exist_ok=True)
 
 # Load dataset
@@ -33,7 +34,6 @@ test_dataset = TensorDataset(X_tensor[-test_size:], y_tensor[-test_size:])
 test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
 
 
-# Define the ResNetFeatureExtractor class (same as training)
 class ResNetFeatureExtractor(nn.Module):
     def __init__(self, input_dim, resnet_version=18):
         super(ResNetFeatureExtractor, self).__init__()
@@ -59,6 +59,30 @@ class ResNetFeatureExtractor(nn.Module):
         return x
 
 
+def save_results(model_name, epochs, batch_size, learning_rate, mae, pearson_corr):
+    """ Save evaluation results to CSV. """
+
+    # Load existing results or create a new DataFrame
+    if os.path.exists(results_csv):
+        df = pd.read_csv(results_csv)
+    else:
+        df = pd.DataFrame(columns=["Model", "Epochs", "Batch Size", "Learning Rate", "MAE", "Pearson Correlation"])
+
+    # Append new results
+    new_entry = pd.DataFrame([{
+        "Model": model_name,
+        "Epochs": epochs,
+        "Batch Size": batch_size,
+        "Learning Rate": learning_rate,
+        "MAE": mae,
+        "Pearson Correlation": pearson_corr
+    }])
+
+    df = pd.concat([df, new_entry], ignore_index=True)
+    df.to_csv(results_csv, index=False)
+    print(f"📊 Results saved to {results_csv}")
+
+
 # Evaluate all trained models
 for model_file in os.listdir(models_dir):
     if model_file.startswith("ResNet") and model_file.endswith(".pth"):
@@ -67,13 +91,13 @@ for model_file in os.listdir(models_dir):
         # Extract model parameters correctly
         try:
             parts = model_file.replace(".pth", "").split("_")
-            resnet_version = int(parts[0].replace("ResNet", ""))  # Extract ResNet version
+            resnet_version = int(parts[0].replace("ResNet", ""))  # Extract ResNet version (18 or 50)
             epochs, batch_size, learning_rate = int(parts[1]), int(parts[2]), float(parts[3])
         except ValueError:
             print(f"⚠️ Skipping model {model_file} due to incorrect filename format.")
             continue  # Skip this model if the filename does not match the expected format
 
-        # Initialize Model (using the correct class)
+        # Initialize Model
         input_dim = X.shape[1]
         model = ResNetFeatureExtractor(input_dim, resnet_version)
 
