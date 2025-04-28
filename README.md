@@ -109,13 +109,6 @@ Each image has a total of **9 features** (3 features per level: sharpness, contr
 
 ---
 
-## Install the dependencies
-```bash
-pip install -r requirements.txt
-```
-
----
-
 ## Running the Project
 
 ### **Step 1: Install Dependencies**
